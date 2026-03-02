@@ -13,7 +13,7 @@ type Config struct {
 	RunAddress string `env:"RUN_ADDRESS" envDefault:"localhost:8080"`
 
 	// Адрес подключения к базе данных PostgreSQL
-	DatabaseUri string `env:"DATABASE_URI"`
+	DatabaseURI string `env:"DATABASE_URI"`
 
 	// Адрес системы расчёта начислений
 	AccrualSystemAddress string `env:"ACCRUAL_SYSTEM_ADDRESS"`
@@ -27,7 +27,7 @@ type Config struct {
 
 var (
 	flagRunAddress           = flag.String("a", "localhost:8080", "Адрес и порт запуска сервиса")
-	flagDatabaseUri          = flag.String("d", "", "Адрес подключения к базе данных")
+	flagDatabaseURI          = flag.String("d", "", "Адрес подключения к базе данных")
 	flagAccrualSystemAddress = flag.String("r", "", "Адрес системы расчёта начислений")
 	flagLogLevel             = flag.String("l", "FATAL", "Уровень логирования")
 	flagSecretKey            = flag.String("s", "", "Секретный ключ для подписи кук")
@@ -41,7 +41,7 @@ func NewConfig() (*Config, error) {
 
 	cfg := &Config{
 		RunAddress:           *flagRunAddress,
-		DatabaseUri:          *flagDatabaseUri,
+		DatabaseURI:          *flagDatabaseURI,
 		AccrualSystemAddress: *flagAccrualSystemAddress,
 		LogLevel:             *flagLogLevel,
 		SecretKey:            *flagSecretKey,
@@ -52,7 +52,7 @@ func NewConfig() (*Config, error) {
 		cfg.RunAddress = val
 	}
 	if val, ok := os.LookupEnv("DATABASE_URI"); ok {
-		cfg.DatabaseUri = val
+		cfg.DatabaseURI = val
 	}
 	if val, ok := os.LookupEnv("ACCRUAL_SYSTEM_ADDRESS"); ok {
 		cfg.AccrualSystemAddress = val

@@ -39,11 +39,11 @@ func InitializeApp() (*App, error) {
 		return nil, fmt.Errorf("failed to initialize logger: %w", err)
 	}
 
-	if cfg.DatabaseUri == "" {
+	if cfg.DatabaseURI == "" {
 		return nil, fmt.Errorf("database URI is required")
 	}
 
-	db, err := database.NewDB(cfg.DatabaseUri)
+	db, err := database.NewDB(cfg.DatabaseURI)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
@@ -78,7 +78,7 @@ func InitializeApp() (*App, error) {
 		log.Warn("Accrual system address not configured, worker will not start")
 	}
 
-	log.Info("Using PostgreSQL storage", zap.String("dsn", maskDSN(cfg.DatabaseUri)))
+	log.Info("Using PostgreSQL storage", zap.String("dsn", maskDSN(cfg.DatabaseURI)))
 
 	return &App{
 		cfg:           cfg,
