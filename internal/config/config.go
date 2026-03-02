@@ -1,0 +1,93 @@
+package config
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"flag"
+	"os"
+)
+
+type Config struct {
+	// Адрес и порт запуска сервиса
+	RunAddress string `env:"RUN_ADDRESS" envDefault:"localhost:8080"`
+
+	// Адрес подключения к базе данных PostgreSQL
+	DatabaseUri string `env:"DATABASE_URI"`
+
+	// Адрес системы расчёта начислений
+	AccrualSystemAddress string `env:"ACCRUAL_SYSTEM_ADDRESS"`
+
+	// Уровень логирования
+	LogLevel string `env:"LOG_LEVEL" envDefault:"FATAL"`
+
+	// Секретный ключ для подписи кук
+	SecretKey string `env:"SECRET_KEY"`
+}
+
+var (
+	flagRunAddress           = flag.String("a", "localhost:8080", "Адрес и порт запуска сервиса")
+	flagDatabaseUri          = flag.String("d", "", "Адрес подключения к базе данных")
+	flagAccrualSystemAddress = flag.String("r", "", "Адрес системы расчёта начислений")
+	flagLogLevel             = flag.String("l", "FATAL", "Уровень логирования")
+	flagSecretKey            = flag.String("s", "", "Секретный ключ для подписи кук")
+)
+
+func NewConfig() (*Config, error) {
+	// Парсим флаги только если они ещё не распарсены
+	if !flag.Parsed() {
+		flag.Parse()
+	}
+
+	cfg := &Config{
+		RunAddress:           *flagRunAddress,
+		DatabaseUri:          *flagDatabaseUri,
+		AccrualSystemAddress: *flagAccrualSystemAddress,
+		LogLevel:             *flagLogLevel,
+		SecretKey:            *flagSecretKey,
+	}
+
+	// Переменные окружения перезаписывают флаги, если они установлены
+	if val, ok := os.LookupEnv("RUN_ADDRESS"); ok {
+		cfg.RunAddress = val
+	}
+	if val, ok := os.LookupEnv("DATABASE_URI"); ok {
+		cfg.DatabaseUri = val
+	}
+	if val, ok := os.LookupEnv("ACCRUAL_SYSTEM_ADDRESS"); ok {
+		cfg.AccrualSystemAddress = val
+	}
+	if val, ok := os.LookupEnv("LOG_LEVEL"); ok {
+		cfg.LogLevel = val
+	}
+
+	if val, ok := os.LookupEnv("SECRET_KEY"); ok {
+		cfg.SecretKey = val
+	}
+
+	// Если секретный ключ не задан, генерируем случайный
+	if cfg.SecretKey == "" {
+		cfg.SecretKey = generateSecretKey()
+	}
+
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+func (c *Config) validate() error {
+	if c.RunAddress == "" {
+		return errors.New("server address is empty")
+	}
+
+	return nil
+}
+
+// generateSecretKey генерирует случайный секретный ключ
+func generateSecretKey() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
