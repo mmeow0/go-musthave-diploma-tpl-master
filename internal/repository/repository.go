@@ -8,11 +8,12 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("not found")
-	ErrConflict      = errors.New("conflict")
-	ErrLoginExists   = errors.New("login already exists")
-	ErrOrderExists   = errors.New("order already exists")
-	ErrInvalidStatus = errors.New("invalid order status")
+	ErrNotFound          = errors.New("not found")
+	ErrConflict          = errors.New("conflict")
+	ErrLoginExists       = errors.New("login already exists")
+	ErrOrderExists       = errors.New("order already exists")
+	ErrInvalidStatus     = errors.New("invalid order status")
+	ErrInsufficientFunds = errors.New("insufficient funds")
 )
 
 type UserRepository interface {

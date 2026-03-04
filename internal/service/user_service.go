@@ -8,6 +8,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var (
+	ErrInvalidCredentials       = errors.New("invalid credentials")
+	ErrLoginPasswordRequired    = errors.New("login and password are required")
+)
+
 type UserService struct {
 	repo repository.UserRepository
 }
@@ -18,7 +23,7 @@ func NewUserService(repo repository.UserRepository) *UserService {
 
 func (s *UserService) Register(ctx context.Context, login, password string) (int64, error) {
 	if login == "" || password == "" {
-		return 0, errors.New("login and password are required")
+		return 0, ErrLoginPasswordRequired
 	}
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -39,20 +44,20 @@ func (s *UserService) Register(ctx context.Context, login, password string) (int
 
 func (s *UserService) Login(ctx context.Context, login, password string) (int64, error) {
 	if login == "" || password == "" {
-		return 0, errors.New("login and password are required")
+		return 0, ErrLoginPasswordRequired
 	}
 
 	user, err := s.repo.GetUserByLogin(ctx, login)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			return 0, errors.New("invalid credentials")
+			return 0, ErrInvalidCredentials
 		}
 		return 0, err
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
 	if err != nil {
-		return 0, errors.New("invalid credentials")
+		return 0, ErrInvalidCredentials
 	}
 
 	return user.ID, nil

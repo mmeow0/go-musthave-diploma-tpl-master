@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"errors"
 
 	"github.com/mmeow0/gophermart-bonus/internal/model"
 )
@@ -48,7 +47,7 @@ func (r *PostgresBalanceRepository) CreateWithdrawal(ctx context.Context, userID
 	}
 
 	if current < sum {
-		return errors.New("insufficient funds")
+		return ErrInsufficientFunds
 	}
 
 	query := `

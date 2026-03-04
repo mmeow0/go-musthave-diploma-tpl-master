@@ -151,7 +151,7 @@ func (h *OrderHandler) Withdraw(w http.ResponseWriter, r *http.Request) {
 
 	err := h.orderService.Withdraw(r.Context(), userID, req.Order, req.Sum)
 	if err != nil {
-		if err.Error() == "insufficient funds" {
+		if errors.Is(err, repository.ErrInsufficientFunds) {
 			w.WriteHeader(http.StatusPaymentRequired)
 			return
 		}

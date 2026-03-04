@@ -13,12 +13,14 @@ import (
 )
 
 type AccrualWorker struct {
-	orderService  *service.OrderService
-	accrualClient *client.AccrualClient
-	logger        *zap.Logger
-	stopChan      chan struct{}
-	wg            sync.WaitGroup
-	interval      time.Duration
+	orderService    *service.OrderService
+	accrualClient   *client.AccrualClient
+	logger          *zap.Logger
+	stopChan        chan struct{}
+	wg              sync.WaitGroup
+	interval        time.Duration
+	intervalMu      sync.Mutex
+	intervalChanged chan struct{}
 }
 
 func NewAccrualWorker(
@@ -27,11 +29,30 @@ func NewAccrualWorker(
 	logger *zap.Logger,
 ) *AccrualWorker {
 	return &AccrualWorker{
-		orderService:  orderService,
-		accrualClient: accrualClient,
-		logger:        logger,
-		stopChan:      make(chan struct{}),
-		interval:      5 * time.Second,
+		orderService:    orderService,
+		accrualClient:   accrualClient,
+		logger:          logger,
+		stopChan:        make(chan struct{}),
+		intervalChanged: make(chan struct{}, 1),
+		interval:        5 * time.Second,
+	}
+}
+
+func (w *AccrualWorker) getInterval() time.Duration {
+	w.intervalMu.Lock()
+	defer w.intervalMu.Unlock()
+	return w.interval
+}
+
+func (w *AccrualWorker) setInterval(d time.Duration) {
+	w.intervalMu.Lock()
+	defer w.intervalMu.Unlock()
+	w.interval = d
+
+	// Уведомляем об изменении интервала
+	select {
+	case w.intervalChanged <- struct{}{}:
+	default:
 	}
 }
 
@@ -48,7 +69,7 @@ func (w *AccrualWorker) Stop() {
 func (w *AccrualWorker) run(ctx context.Context) {
 	defer w.wg.Done()
 
-	ticker := time.NewTicker(w.interval)
+	ticker := time.NewTicker(w.getInterval())
 	defer ticker.Stop()
 
 	for {
@@ -59,6 +80,14 @@ func (w *AccrualWorker) run(ctx context.Context) {
 		case <-w.stopChan:
 			w.logger.Info("Accrual worker stopped")
 			return
+		case <-w.intervalChanged:
+			// Пересоздаём ticker с новым интервалом
+			ticker.Stop()
+			newInterval := w.getInterval()
+			ticker = time.NewTicker(newInterval)
+			w.logger.Info("Accrual worker interval updated",
+				zap.Duration("new_interval", newInterval),
+			)
 		case <-ticker.C:
 			if err := w.processOrders(ctx); err != nil {
 				w.logger.Error("Failed to process orders", zap.Error(err))
@@ -103,7 +132,7 @@ func (w *AccrualWorker) processOrder(ctx context.Context, order model.Order) err
 			w.logger.Warn("Too many requests to accrual system",
 				zap.Int("retry_after_seconds", retryAfter),
 			)
-			w.interval = time.Duration(retryAfter) * time.Second
+			w.setInterval(time.Duration(retryAfter) * time.Second)
 			return nil
 		}
 

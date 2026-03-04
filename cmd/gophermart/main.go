@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/mmeow0/gophermart-bonus/internal/app"
 	"log"
+
+	"github.com/mmeow0/gophermart-bonus/internal/app"
 )
 
 func main() {

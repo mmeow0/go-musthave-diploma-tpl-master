@@ -8,6 +8,11 @@ import (
 	"os"
 )
 
+var (
+	ErrEmptyServerAddress  = errors.New("server address is empty")
+	ErrSecretKeyGeneration = errors.New("failed to generate secret key")
+)
+
 type Config struct {
 	// Адрес и порт запуска сервиса
 	RunAddress string `env:"RUN_ADDRESS" envDefault:"localhost:8080"`
@@ -67,7 +72,11 @@ func NewConfig() (*Config, error) {
 
 	// Если секретный ключ не задан, генерируем случайный
 	if cfg.SecretKey == "" {
-		cfg.SecretKey = generateSecretKey()
+		secretKey, err := generateSecretKey()
+		if err != nil {
+			return nil, ErrSecretKeyGeneration
+		}
+		cfg.SecretKey = secretKey
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -79,15 +88,18 @@ func NewConfig() (*Config, error) {
 
 func (c *Config) validate() error {
 	if c.RunAddress == "" {
-		return errors.New("server address is empty")
+		return ErrEmptyServerAddress
 	}
 
 	return nil
 }
 
 // generateSecretKey генерирует случайный секретный ключ
-func generateSecretKey() string {
+func generateSecretKey() (string, error) {
 	b := make([]byte, 32)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(b), nil
 }

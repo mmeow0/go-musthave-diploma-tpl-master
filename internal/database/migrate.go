@@ -16,8 +16,7 @@ func RunMigrations(db *sql.DB, migrationsPath string) error {
 	// Ищем папку с миграциями
 	actualPath, err := findMigrationsPath(migrationsPath)
 	if err != nil {
-		// Если папка не найдена, пытаемся создать схему напрямую
-		return createSchemaDirectly(db)
+		return fmt.Errorf("migrations directory not found at path '%s': please ensure migrations exist before starting the application", migrationsPath)
 	}
 
 	// Создаём драйвер для PostgreSQL
@@ -33,8 +32,7 @@ func RunMigrations(db *sql.DB, migrationsPath string) error {
 		driver,
 	)
 	if err != nil {
-		// Если не удалось создать migrate, создаём схему напрямую
-		return createSchemaDirectly(db)
+		return fmt.Errorf("failed to initialize migrations from '%s': %w", actualPath, err)
 	}
 
 	// Применяем миграции
@@ -76,34 +74,5 @@ func findMigrationsPath(basePath string) (string, error) {
 	}
 
 	return "", fmt.Errorf("migrations directory not found")
-}
-
-// createSchemaDirectly создаёт схему напрямую если миграции не найдены
-func createSchemaDirectly(db *sql.DB) error {
-	query := `
-		-- Создание таблицы для хранения сокращённых URL
-		CREATE TABLE IF NOT EXISTS urls (
-			id SERIAL PRIMARY KEY,
-			short_id VARCHAR(255) UNIQUE NOT NULL,
-			original_url TEXT NOT NULL,
-			user_id VARCHAR(255) NOT NULL,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-		);
-
-		-- Индексы для оптимизации запросов
-		CREATE INDEX IF NOT EXISTS idx_urls_short_id ON urls(short_id);
-		CREATE INDEX IF NOT EXISTS idx_urls_user_id ON urls(user_id);
-		
-		-- Уникальный индекс для original_url (для обработки конфликтов)
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_urls_original_url ON urls(original_url);
-	`
-
-	_, err := db.Exec(query)
-	if err != nil {
-		return fmt.Errorf("failed to create schema directly: %w", err)
-	}
-
-	return nil
 }
 
