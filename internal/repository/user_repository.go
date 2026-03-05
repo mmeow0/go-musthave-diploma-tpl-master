@@ -10,11 +10,13 @@ import (
 )
 
 type PostgresUserRepository struct {
-	db *sql.DB
+	*BaseRepository[model.User]
 }
 
 func NewPostgresUserRepository(db *sql.DB) *PostgresUserRepository {
-	return &PostgresUserRepository{db: db}
+	return &PostgresUserRepository{
+		BaseRepository: NewBaseRepository[model.User](db),
+	}
 }
 
 func (r *PostgresUserRepository) CreateUser(ctx context.Context, login, passwordHash string) (*model.User, error) {
@@ -29,7 +31,10 @@ func (r *PostgresUserRepository) CreateUser(ctx context.Context, login, password
 		RETURNING id, created_at
 	`
 
-	err := r.db.QueryRowContext(ctx, query, login, passwordHash).Scan(&user.ID, &user.CreatedAt)
+	err := r.QueryRow(ctx, query, func(row *sql.Row) error {
+		return row.Scan(&user.ID, &user.CreatedAt)
+	}, login, passwordHash)
+
 	if err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
@@ -46,16 +51,11 @@ func (r *PostgresUserRepository) GetUserByLogin(ctx context.Context, login strin
 
 	query := `SELECT id, login, password_hash, created_at FROM users WHERE login = $1`
 
-	err := r.db.QueryRowContext(ctx, query, login).Scan(
-		&user.ID,
-		&user.Login,
-		&user.PasswordHash,
-		&user.CreatedAt,
-	)
+	err := r.QueryRow(ctx, query, func(row *sql.Row) error {
+		return row.Scan(&user.ID, &user.Login, &user.PasswordHash, &user.CreatedAt)
+	}, login)
+
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
 		return nil, err
 	}
 
@@ -67,16 +67,11 @@ func (r *PostgresUserRepository) GetUserByID(ctx context.Context, userID int64) 
 
 	query := `SELECT id, login, password_hash, created_at FROM users WHERE id = $1`
 
-	err := r.db.QueryRowContext(ctx, query, userID).Scan(
-		&user.ID,
-		&user.Login,
-		&user.PasswordHash,
-		&user.CreatedAt,
-	)
+	err := r.QueryRow(ctx, query, func(row *sql.Row) error {
+		return row.Scan(&user.ID, &user.Login, &user.PasswordHash, &user.CreatedAt)
+	}, userID)
+
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
 		return nil, err
 	}
 
@@ -84,5 +79,5 @@ func (r *PostgresUserRepository) GetUserByID(ctx context.Context, userID int64) 
 }
 
 func (r *PostgresUserRepository) Close() error {
-	return nil
+	return r.BaseRepository.Close()
 }

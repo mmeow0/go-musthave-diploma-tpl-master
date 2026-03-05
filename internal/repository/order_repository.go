@@ -10,11 +10,13 @@ import (
 )
 
 type PostgresOrderRepository struct {
-	db *sql.DB
+	*BaseRepository[model.Order]
 }
 
 func NewPostgresOrderRepository(db *sql.DB) *PostgresOrderRepository {
-	return &PostgresOrderRepository{db: db}
+	return &PostgresOrderRepository{
+		BaseRepository: NewBaseRepository[model.Order](db),
+	}
 }
 
 func (r *PostgresOrderRepository) CreateOrder(ctx context.Context, number string, userID int64) (*model.Order, error) {
@@ -30,10 +32,10 @@ func (r *PostgresOrderRepository) CreateOrder(ctx context.Context, number string
 		RETURNING id, uploaded_at
 	`
 
-	err := r.db.QueryRowContext(ctx, query, number, userID, model.OrderStatusNew).Scan(
-		&order.ID,
-		&order.UploadedAt,
-	)
+	err := r.QueryRow(ctx, query, func(row *sql.Row) error {
+		return row.Scan(&order.ID, &order.UploadedAt)
+	}, number, userID, model.OrderStatusNew)
+
 	if err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
@@ -57,18 +59,11 @@ func (r *PostgresOrderRepository) GetOrderByNumber(ctx context.Context, number s
 
 	query := `SELECT id, number, user_id, status, accrual, uploaded_at FROM orders WHERE number = $1`
 
-	err := r.db.QueryRowContext(ctx, query, number).Scan(
-		&order.ID,
-		&order.Number,
-		&order.UserID,
-		&order.Status,
-		&order.Accrual,
-		&order.UploadedAt,
-	)
+	err := r.QueryRow(ctx, query, func(row *sql.Row) error {
+		return row.Scan(&order.ID, &order.Number, &order.UserID, &order.Status, &order.Accrual, &order.UploadedAt)
+	}, number)
+
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
 		return nil, err
 	}
 
@@ -83,30 +78,17 @@ func (r *PostgresOrderRepository) GetUserOrders(ctx context.Context, userID int6
 		ORDER BY uploaded_at DESC
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	orders := []model.Order{}
-	for rows.Next() {
+	err := r.Query(ctx, query, func(rows *sql.Rows) error {
 		var order model.Order
-		err := rows.Scan(
-			&order.ID,
-			&order.Number,
-			&order.UserID,
-			&order.Status,
-			&order.Accrual,
-			&order.UploadedAt,
-		)
-		if err != nil {
-			return nil, err
+		if err := rows.Scan(&order.ID, &order.Number, &order.UserID, &order.Status, &order.Accrual, &order.UploadedAt); err != nil {
+			return err
 		}
 		orders = append(orders, order)
-	}
+		return nil
+	}, userID)
 
-	if err = rows.Err(); err != nil {
+	if err != nil {
 		return nil, err
 	}
 
@@ -115,22 +97,7 @@ func (r *PostgresOrderRepository) GetUserOrders(ctx context.Context, userID int6
 
 func (r *PostgresOrderRepository) UpdateOrderStatus(ctx context.Context, number string, status model.OrderStatus, accrual float64) error {
 	query := `UPDATE orders SET status = $1, accrual = $2 WHERE number = $3`
-
-	result, err := r.db.ExecContext(ctx, query, status, accrual, number)
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected == 0 {
-		return ErrNotFound
-	}
-
-	return nil
+	return r.ExecWithRowsAffected(ctx, query, status, accrual, number)
 }
 
 func (r *PostgresOrderRepository) GetOrdersForProcessing(ctx context.Context, limit int) ([]model.Order, error) {
@@ -142,30 +109,17 @@ func (r *PostgresOrderRepository) GetOrdersForProcessing(ctx context.Context, li
 		LIMIT $3
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, model.OrderStatusNew, model.OrderStatusProcessing, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	orders := []model.Order{}
-	for rows.Next() {
+	err := r.Query(ctx, query, func(rows *sql.Rows) error {
 		var order model.Order
-		err := rows.Scan(
-			&order.ID,
-			&order.Number,
-			&order.UserID,
-			&order.Status,
-			&order.Accrual,
-			&order.UploadedAt,
-		)
-		if err != nil {
-			return nil, err
+		if err := rows.Scan(&order.ID, &order.Number, &order.UserID, &order.Status, &order.Accrual, &order.UploadedAt); err != nil {
+			return err
 		}
 		orders = append(orders, order)
-	}
+		return nil
+	}, model.OrderStatusNew, model.OrderStatusProcessing, limit)
 
-	if err = rows.Err(); err != nil {
+	if err != nil {
 		return nil, err
 	}
 
@@ -173,5 +127,5 @@ func (r *PostgresOrderRepository) GetOrdersForProcessing(ctx context.Context, li
 }
 
 func (r *PostgresOrderRepository) Close() error {
-	return nil
+	return r.BaseRepository.Close()
 }

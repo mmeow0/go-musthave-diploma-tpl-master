@@ -8,11 +8,13 @@ import (
 )
 
 type PostgresBalanceRepository struct {
-	db *sql.DB
+	*BaseRepository[model.Withdrawal]
 }
 
 func NewPostgresBalanceRepository(db *sql.DB) *PostgresBalanceRepository {
-	return &PostgresBalanceRepository{db: db}
+	return &PostgresBalanceRepository{
+		BaseRepository: NewBaseRepository[model.Withdrawal](db),
+	}
 }
 
 func (r *PostgresBalanceRepository) GetBalance(ctx context.Context, userID int64) (current float64, withdrawn float64, err error) {
@@ -25,7 +27,10 @@ func (r *PostgresBalanceRepository) GetBalance(ctx context.Context, userID int64
 	`
 
 	var accrued float64
-	err = r.db.QueryRowContext(ctx, query, model.OrderStatusProcessed, userID).Scan(&accrued, &withdrawn)
+	err = r.QueryRow(ctx, query, func(row *sql.Row) error {
+		return row.Scan(&accrued, &withdrawn)
+	}, model.OrderStatusProcessed, userID)
+
 	if err != nil {
 		return 0, 0, err
 	}
@@ -35,7 +40,7 @@ func (r *PostgresBalanceRepository) GetBalance(ctx context.Context, userID int64
 }
 
 func (r *PostgresBalanceRepository) CreateWithdrawal(ctx context.Context, userID int64, orderNumber string, sum float64) error {
-	tx, err := r.db.BeginTx(ctx, nil)
+	tx, err := r.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -71,29 +76,17 @@ func (r *PostgresBalanceRepository) GetUserWithdrawals(ctx context.Context, user
 		ORDER BY processed_at DESC
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	withdrawals := []model.Withdrawal{}
-	for rows.Next() {
+	err := r.Query(ctx, query, func(rows *sql.Rows) error {
 		var w model.Withdrawal
-		err := rows.Scan(
-			&w.ID,
-			&w.UserID,
-			&w.OrderNumber,
-			&w.Sum,
-			&w.ProcessedAt,
-		)
-		if err != nil {
-			return nil, err
+		if err := rows.Scan(&w.ID, &w.UserID, &w.OrderNumber, &w.Sum, &w.ProcessedAt); err != nil {
+			return err
 		}
 		withdrawals = append(withdrawals, w)
-	}
+		return nil
+	}, userID)
 
-	if err = rows.Err(); err != nil {
+	if err != nil {
 		return nil, err
 	}
 
@@ -101,5 +94,5 @@ func (r *PostgresBalanceRepository) GetUserWithdrawals(ctx context.Context, user
 }
 
 func (r *PostgresBalanceRepository) Close() error {
-	return nil
+	return r.BaseRepository.Close()
 }
